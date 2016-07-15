@@ -168,6 +168,9 @@ void reduce_minmax_kernel(const float* const d_in, float* d_out, const size_t si
 }
 
 int get_max_size(int n, int d) {
+    if(n%d == 0) {
+      return (int)ceil( (float)n/(float)d );
+    }
     return (int)ceil( (float)n/(float)d ) + 1;
 }
 
