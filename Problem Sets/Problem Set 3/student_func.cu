@@ -68,14 +68,16 @@
 
 #define THREADS_PER_BLOCK 1024
 #define NUM_EXAMPLES 100
+#define MIN 0
+#define MAX 1
 
 __global__
 void histogramKernel(unsigned int* deviceBins, 
-                      const float* deviceInBuffer, 
-                      const int binCount, 
-                      const float lumMin, 
-                      const float lumMax, 
-                      const int bufferSize) 
+                     const float* deviceInBuffer, 
+                     const int binCount, 
+                     const float lumMin, 
+                     const float lumMax, 
+                     const int bufferSize) 
 {  
     int bufferIndex = threadIdx.x + blockDim.x * blockIdx.x;
     
@@ -139,7 +141,7 @@ void reduceMinMaxKernel(const float* const deviceInBuffer,
     else
     {
         // handle out-of-bounds situations
-        if (minOrMax == 0)
+        if (minOrMax == MIN)
         {
             sharedBuffer[threadIndex] = FLT_MAX;
         }
@@ -155,7 +157,7 @@ void reduceMinMaxKernel(const float* const deviceInBuffer,
     {
         if (threadIndex < s) 
         {
-            if (minOrMax == 0) 
+            if (minOrMax == MIN) 
             {
                 sharedBuffer[threadIndex] = min(sharedBuffer[threadIndex], sharedBuffer[threadIndex + s]);
             } 
