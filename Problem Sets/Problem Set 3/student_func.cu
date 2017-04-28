@@ -71,19 +71,19 @@
 
 __global__
 void histogramKernel(unsigned int* deviceBins, 
-					  const float* deviceInBuffer, 
-					  const int binCount, 
-					  const float lumMin, 
-					  const float lumMax, 
-					  const int bufferSize) 
+                      const float* deviceInBuffer, 
+                      const int binCount, 
+                      const float lumMin, 
+                      const float lumMax, 
+                      const int bufferSize) 
 {  
     int bufferIndex = threadIdx.x + blockDim.x * blockIdx.x;
-	
-	// handle out of bounds situations
+    
+    // handle out of bounds situations
     if (bufferIndex >= bufferSize)
-	{
-		return;
-	}
+    {
+        return;
+    }
     float range = lumMax - lumMin;
     int binIndex = ((deviceInBuffer[bufferIndex] - lumMin) / range) * binCount;
     atomicAdd(&deviceBins[binIndex], 1);
@@ -93,83 +93,83 @@ __global__
 void scanKernel(unsigned int* deviceBins, int bufferSize) 
 {
     int bufferIndex = threadIdx.x + blockDim.x * blockIdx.x;
-	
+    
     if (bufferIndex >= bufferSize)
     {
-		return;
-	}
+        return;
+    }
     
     for (int s = 1; s <= bufferSize; s *= 2) 
-	{
-		int spot = bufferIndex - s; 
-		unsigned int val = 0;
+    {
+        int spot = bufferIndex - s; 
+        unsigned int val = 0;
 
-		if (spot >= 0)
-		{
-		  val = deviceBins[spot];
-		}
-		__syncthreads();
+        if (spot >= 0)
+        {
+          val = deviceBins[spot];
+        }
+        __syncthreads();
 
-		if (spot >= 0)
-		{
-		  deviceBins[bufferIndex] += val;
-		}
-		__syncthreads();
+        if (spot >= 0)
+        {
+          deviceBins[bufferIndex] += val;
+        }
+        __syncthreads();
     }
 }
 
 __global__
 void reduceMinMaxKernel(const float* const deviceInBuffer, 
-						float* deviceOutBuffer, 
-						const size_t bufferSize, 
-						int minOrMax) 
+                        float* deviceOutBuffer, 
+                        const size_t bufferSize, 
+                        int minOrMax) 
 {
     extern __shared__ float sharedBuffer[];
     
-	int blockSize = blockDim.x;
-	int blockIndex = blockIdx.x;
-	int threadIndex = threadIdx.x; 
+    int blockSize = blockDim.x;
+    int blockIndex = blockIdx.x;
+    int threadIndex = threadIdx.x; 
     int bufferIndex = threadIndex + blockSize * blockIndex;
     
     // copy this block's portion of the input buffer into the shared buffer
     if (bufferIndex < bufferSize) 
-	{
+    {
         sharedBuffer[threadIndex] = deviceInBuffer[bufferIndex];
     } 
-	else
-	{
-		// handle out-of-bounds situations
+    else
+    {
+        // handle out-of-bounds situations
         if (minOrMax == 0)
-		{
-			sharedBuffer[threadIndex] = FLT_MAX;
-		}
+        {
+            sharedBuffer[threadIndex] = FLT_MAX;
+        }
         else
-		{
-			sharedBuffer[threadIndex] = -FLT_MAX;
-		}
+        {
+            sharedBuffer[threadIndex] = -FLT_MAX;
+        }
     }
     __syncthreads();
        
-	// min & max reduce
+    // min & max reduce
     for (unsigned int s = blockSize / 2; s > 0; s /= 2) 
-	{
+    {
         if (threadIndex < s) 
-		{
+        {
             if (minOrMax == 0) 
-			{
+            {
                 sharedBuffer[threadIndex] = min(sharedBuffer[threadIndex], sharedBuffer[threadIndex + s]);
             } 
-			else 
-			{
+            else 
+            {
                 sharedBuffer[threadIndex] = max(sharedBuffer[threadIndex], sharedBuffer[threadIndex + s]);
             }
         }
         __syncthreads();
     }
     
-	// write the min/max value of this block's portion into the output buffer
+    // write the min/max value of this block's portion into the output buffer
     if (threadIndex == 0) 
-	{
+    {
         deviceOutBuffer[blockIndex] = sharedBuffer[0];
     }
 }
@@ -183,23 +183,23 @@ static float reduceMinMax(const float* const deviceInBuffer, const size_t buffer
 {
     size_t currentBufferSize = bufferSize;
     float* deviceInputTemp;
-	float* deviceOutputTemp;
+    float* deviceOutputTemp;
     
-	// copy the input buffer to a temporary buffer
+    // copy the input buffer to a temporary buffer
     checkCudaErrors(cudaMalloc(&deviceInputTemp, sizeof(float) * bufferSize));    
     checkCudaErrors(cudaMemcpy(deviceInputTemp, deviceInBuffer, sizeof(float) * bufferSize, cudaMemcpyDeviceToDevice));
     
     const int sharedMemorySize = sizeof(float) * THREADS_PER_BLOCK;
     
-	// keep reducing until the entire thing fits into a single block
+    // keep reducing until the entire thing fits into a single block
     while (1) 
-	{
-		int numBlocks = calculateNumBlocks(currentBufferSize);
+    {
+        int numBlocks = calculateNumBlocks(currentBufferSize);
         checkCudaErrors(cudaMalloc(&deviceOutputTemp, sizeof(float) * numBlocks));
         reduceMinMaxKernel<<<numBlocks, THREADS_PER_BLOCK, sharedMemorySize>>>
-							(deviceInputTemp, deviceOutputTemp, currentBufferSize, minOrMax);
+                            (deviceInputTemp, deviceOutputTemp, currentBufferSize, minOrMax);
         cudaDeviceSynchronize(); 
-		checkCudaErrors(cudaGetLastError());
+        checkCudaErrors(cudaGetLastError());
             
         // move the current input to the output, and clear the last input if necessary
         checkCudaErrors(cudaFree(deviceInputTemp));
@@ -207,16 +207,16 @@ static float reduceMinMax(const float* const deviceInBuffer, const size_t buffer
         
         if (currentBufferSize < THREADS_PER_BLOCK) 
         {
-			break;
-		}
-		else
-		{
-			// update current buffer size
-			currentBufferSize = calculateNumBlocks(currentBufferSize);
-		}
+            break;
+        }
+        else
+        {
+            // update current buffer size
+            currentBufferSize = calculateNumBlocks(currentBufferSize);
+        }
     }
     
-	// transfer the min/max value to host memory and return
+    // transfer the min/max value to host memory and return
     float hostResult;
     cudaMemcpy(&hostResult, deviceOutputTemp, sizeof(float), cudaMemcpyDeviceToHost);
     cudaFree(deviceOutputTemp);
@@ -231,7 +231,7 @@ void your_histogram_and_prefixsum(const float* const deviceLogLum,
                                   const size_t numCols,
                                   const size_t numBins)
 {
-	// REDUCE
+    // REDUCE
     const size_t imageSize = numRows * numCols;
     minLogLum = reduceMinMax(deviceLogLum, imageSize, 0);
     maxLogLum = reduceMinMax(deviceLogLum, imageSize, 1);
@@ -240,39 +240,39 @@ void your_histogram_and_prefixsum(const float* const deviceLogLum,
     printf("Max: %f\n", maxLogLum);
     printf("Number of Bins: %d\n", numBins);
     
-	// HISTOGRAM
+    // HISTOGRAM
     unsigned int* deviceBins;
     size_t histogramSize = sizeof(unsigned int) * numBins;
     checkCudaErrors(cudaMalloc(&deviceBins, histogramSize));    
     checkCudaErrors(cudaMemset(deviceBins, 0, histogramSize));
     dim3 numBlocksHistogram(calculateNumBlocks(imageSize));
     histogramKernel<<<numBlocksHistogram, THREADS_PER_BLOCK>>>
-					 (deviceBins, deviceLogLum, numBins, minLogLum, maxLogLum, imageSize);
+                     (deviceBins, deviceLogLum, numBins, minLogLum, maxLogLum, imageSize);
     cudaDeviceSynchronize(); 
-	checkCudaErrors(cudaGetLastError());
+    checkCudaErrors(cudaGetLastError());
 
-	// display some examples of histogram
+    // display some examples of histogram
     unsigned int hostOutBuffer[NUM_EXAMPLES];
     cudaMemcpy(&hostOutBuffer, deviceBins, sizeof(unsigned int) * NUM_EXAMPLES, cudaMemcpyDeviceToHost);
     
-	for (int i = 0; i < NUM_EXAMPLES; i++)
-	{
-		printf("hist out %d\n", hostOutBuffer[i]);
-	}
+    for (int i = 0; i < NUM_EXAMPLES; i++)
+    {
+        printf("hist out %d\n", hostOutBuffer[i]);
+    }
 
-	// SCAN
+    // SCAN
     dim3 numBlocksScan(calculateNumBlocks(numBins));
     scanKernel<<<numBlocksScan, THREADS_PER_BLOCK>>>(deviceBins, numBins);
     cudaDeviceSynchronize(); 
-	checkCudaErrors(cudaGetLastError());
+    checkCudaErrors(cudaGetLastError());
     
-	// display some examples of CDF
+    // display some examples of CDF
     cudaMemcpy(&hostOutBuffer, deviceBins, sizeof(unsigned int) * NUM_EXAMPLES, cudaMemcpyDeviceToHost);
     
-	for (int i = 0; i < NUM_EXAMPLES; i++)
-	{
-		printf("cdf out %d\n", hostOutBuffer[i]);
-	}
+    for (int i = 0; i < NUM_EXAMPLES; i++)
+    {
+        printf("cdf out %d\n", hostOutBuffer[i]);
+    }
     cudaMemcpy(deviceCdf, deviceBins, histogramSize, cudaMemcpyDeviceToDevice);
     checkCudaErrors(cudaFree(deviceBins));
 }
